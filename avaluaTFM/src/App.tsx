@@ -42,6 +42,7 @@ import {
 const SAMPLE_TFM: TFM = {
   id: 'albert-mallol-miron-2024',
   studentName: 'Albert Mallol Miron',
+  tfmTitle: 'Disseny i avaluació d\'un programa de formació interactiu sobre competència digital docent',
   evaluatorRole: 'tutor',
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
@@ -75,6 +76,11 @@ const SAMPLE_TFM: TFM = {
   commonNotes: "<p>L'estudiant <strong>Albert Mallol Miron</strong> ha defensat el seu TFM demostrant un gran bagatge pràctic i teòric. S'aprecien competències adquirides de nivell excel·lent, especialment en el disseny i comunicació dels resultats de l'aprenentatge del professorat.</p>",
 };
 
+const DEFAULT_GLOBAL_LINKS = [
+  { id: 'lnk-1', label: 'Eina de Rúbriques', url: 'https://aagust11.github.io/uoceines/avaluaTFM/' },
+  { id: 'lnk-2', label: 'Dossier de Treball', url: 'https://github.com/aagust11/uoceines' }
+];
+
 export default function App() {
   const [tfms, setTfms] = useState<TFM[]>([]);
   const [activeTfmId, setActiveTfmId] = useState<string | null>(null);
@@ -84,8 +90,15 @@ export default function App() {
   
   // Create / Input student fields
   const [newStudentName, setNewStudentName] = useState('');
+  const [newTfmTitle, setNewTfmTitle] = useState('');
   const [newDefaultRole, setNewDefaultRole] = useState<'tutor' | 'avaluador'>('tutor');
   const [isCreating, setIsCreating] = useState(false);
+
+  // States for adding links inline (now globally shared)
+  const [globalLinks, setGlobalLinks] = useState<{ id: string; label: string; url: string }[]>([]);
+  const [showAddLink, setShowAddLink] = useState(false);
+  const [newLinkLabel, setNewLinkLabel] = useState('');
+  const [newLinkUrl, setNewLinkUrl] = useState('');
 
   // 1. Initial State Load (LocalStorage Hot Cash Fallback + Checking previous DB Session file handle)
   useEffect(() => {
@@ -108,6 +121,20 @@ export default function App() {
       setActiveTfmId(SAMPLE_TFM.id);
     }
 
+    const cachedLinks = localStorage.getItem('avaluacions_tfm_uoc_global_links');
+    if (cachedLinks) {
+      try {
+        const parsed = JSON.parse(cachedLinks);
+        if (parsed && Array.isArray(parsed)) {
+          setGlobalLinks(parsed);
+        }
+      } catch (err) {
+        console.error('Error llegint globalLinks:', err);
+      }
+    } else {
+      setGlobalLinks(DEFAULT_GLOBAL_LINKS);
+    }
+
     // Check IndexedDB stored file handle
     getStoredFileHandle().then((handle) => {
       if (handle) {
@@ -122,6 +149,15 @@ export default function App() {
       localStorage.setItem('avaluacions_tfm_uoc_state', JSON.stringify(tfms));
     }
   }, [tfms]);
+
+  // Synchronize global links to localStorage
+  useEffect(() => {
+    if (globalLinks.length > 0) {
+      localStorage.setItem('avaluacions_tfm_uoc_global_links', JSON.stringify(globalLinks));
+    } else {
+      localStorage.removeItem('avaluacions_tfm_uoc_global_links');
+    }
+  }, [globalLinks]);
 
   // 3. Automated File System Writer Trigger
   const triggerAutoSaveToFile = useCallback(async (currentTfms: TFM[], handle: FileSystemFileHandle) => {
@@ -363,6 +399,8 @@ export default function App() {
     const newTfm: TFM = {
       id: `tfm-${Date.now()}`,
       studentName: newStudentName.trim(),
+      tfmTitle: newTfmTitle.trim(),
+      directLinks: [],
       evaluatorRole: newDefaultRole,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -380,6 +418,7 @@ export default function App() {
     setTfms((prev) => [newTfm, ...prev]);
     setActiveTfmId(newTfm.id);
     setNewStudentName('');
+    setNewTfmTitle('');
     setIsCreating(false);
     setActiveTab('treball'); // start directly on the grading rubric view
   };
@@ -409,6 +448,29 @@ export default function App() {
         return t;
       })
     );
+  };
+
+  const handleAddLink = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newLinkLabel.trim() || !newLinkUrl.trim()) return;
+
+    let formattedUrl = newLinkUrl.trim();
+    if (!/^https?:\/\//i.test(formattedUrl)) {
+      formattedUrl = `https://${formattedUrl}`;
+    }
+
+    setGlobalLinks((prev) => [
+      ...prev,
+      { id: `lnk-${Date.now()}`, label: newLinkLabel.trim(), url: formattedUrl }
+    ]);
+
+    setNewLinkLabel('');
+    setNewLinkUrl('');
+    setShowAddLink(false);
+  };
+
+  const handleRemoveLink = (linkId: string) => {
+    setGlobalLinks((prev) => prev.filter((l) => l.id !== linkId));
   };
 
   // Active student object helper
@@ -606,6 +668,20 @@ export default function App() {
               </div>
 
               <div className="flex flex-col gap-1">
+                <label htmlFor="student-title-input" className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">
+                  Títol del TFM
+                </label>
+                <input
+                  id="student-title-input"
+                  type="text"
+                  value={newTfmTitle}
+                  onChange={(e) => setNewTfmTitle(e.target.value)}
+                  placeholder="Ex: Disseny i avaluació d'un programa..."
+                  className="w-full text-xs border border-slate-200 rounded-lg p-2 focus:outline-hidden focus:border-indigo-500 bg-white"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
                 <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Rol per Defecte</span>
                 <div className="grid grid-cols-2 gap-1 bg-slate-200 p-0.5 rounded-lg text-[10px] font-bold">
                   <button
@@ -678,9 +754,18 @@ export default function App() {
                     }`}
                   >
                     <div className="flex items-start justify-between gap-1.5 w-full">
-                      <div className="flex items-center gap-1.5">
-                        <UserCheck size={14} className={isActive ? 'text-indigo-200' : 'text-slate-400'} />
-                        <span className="text-sm font-bold tracking-tight pr-5 break-all">{t.studentName}</span>
+                      <div className="flex flex-col gap-1 flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <UserCheck size={14} className={isActive ? 'text-indigo-200 shrink-0' : 'text-slate-400 shrink-0'} />
+                          <span className="text-sm font-bold tracking-tight break-words">{t.studentName}</span>
+                        </div>
+                        {t.tfmTitle && (
+                          <span className={`text-[11px] line-clamp-2 mt-0.5 leading-tight ${
+                            isActive ? 'text-indigo-200/95 font-medium' : 'text-slate-500 font-normal'
+                          }`}>
+                            {t.tfmTitle}
+                          </span>
+                        )}
                       </div>
                       
                       <button
@@ -690,7 +775,7 @@ export default function App() {
                           e.stopPropagation();
                           handleDeleteTfm(t.id, t.studentName);
                         }}
-                        className={`opacity-0 group-hover:opacity-100 p-1 rounded-md transition-opacity -mt-1 -mr-1 hover:bg-slate-900/10 ${
+                        className={`opacity-0 group-hover:opacity-100 p-1 rounded-md transition-opacity -mt-1 -mr-1 hover:bg-slate-900/10 shrink-0 ${
                           isActive ? 'text-indigo-200 hover:text-white' : 'text-slate-400 hover:text-rose-600'
                         }`}
                         title="Eliminar aquest TFM"
@@ -715,6 +800,99 @@ export default function App() {
             )}
           </div>
 
+          {/* Global Direct Links section */}
+          <div className="border-t border-slate-150 pt-4 flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-extrabold text-slate-400 uppercase tracking-widest flex items-center gap-1.5 select-none">
+                🔗 Enllaços Generals
+              </span>
+              {!showAddLink && (
+                <button
+                  type="button"
+                  onClick={() => setShowAddLink(true)}
+                  className="text-[11px] font-bold text-indigo-600 hover:text-indigo-850 flex items-center gap-0.5"
+                  title="Afegeix un nou enllaç directe general"
+                >
+                  <Plus size={11} className="stroke-[2.5]" />
+                  <span>Afegeix</span>
+                </button>
+              )}
+            </div>
+
+            {/* Rendering list of global links */}
+            <div className="flex flex-wrap gap-1.5">
+              {globalLinks.length === 0 ? (
+                <span className="text-[11px] text-slate-400 italic">No hi ha enllaços de referència.</span>
+              ) : (
+                globalLinks.map((lnk) => (
+                  <span
+                    key={lnk.id}
+                    className="inline-flex items-center gap-1.5 px-2 py-1 bg-slate-50 hover:bg-indigo-50/55 border border-slate-200 hover:border-indigo-150 rounded-lg text-xs font-semibold text-slate-700 hover:text-indigo-700 transition-colors"
+                  >
+                    <a
+                      href={lnk.url}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="hover:underline flex items-center"
+                    >
+                      {lnk.label}
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveLink(lnk.id)}
+                      className="text-slate-400 hover:text-rose-600 transition-colors font-bold leading-none text-[9px] w-2.5 h-2.5 flex items-center justify-center rounded-full hover:bg-slate-200/50"
+                      title="Elimina enllaç"
+                    >
+                      ✕
+                    </button>
+                  </span>
+                ))
+              )}
+            </div>
+
+            {showAddLink && (
+              <form onSubmit={handleAddLink} className="bg-slate-50 border border-slate-200 p-2.5 rounded-xl flex flex-col gap-2 shadow-xs">
+                <div className="flex gap-1.5">
+                  <input
+                    type="text"
+                    required
+                    value={newLinkLabel}
+                    onChange={(e) => setNewLinkLabel(e.target.value)}
+                    placeholder="Dossier, Moodle..."
+                    className="text-[11px] px-2 py-1 border border-slate-250 rounded-md bg-white focus:outline-hidden flex-1 min-w-0"
+                  />
+                  <input
+                    type="text"
+                    required
+                    value={newLinkUrl}
+                    onChange={(e) => setNewLinkUrl(e.target.value)}
+                    placeholder="https://..."
+                    className="text-[11px] px-2 py-1 border border-slate-250 rounded-md bg-white focus:outline-hidden flex-1 min-w-0"
+                  />
+                </div>
+                <div className="flex justify-end gap-1.5 text-[10px]">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAddLink(false);
+                      setNewLinkLabel('');
+                      setNewLinkUrl('');
+                    }}
+                    className="text-slate-500 hover:text-slate-800 font-bold"
+                  >
+                    Cancel·la
+                  </button>
+                  <button
+                    type="submit"
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-2.5 py-1 rounded-sm"
+                  >
+                    Desa
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+
           <div className="text-[10px] text-slate-500 font-medium leading-relaxed border-t border-slate-150 pt-3 flex flex-col gap-1.5 select-none bg-slate-50/50 p-2.5 rounded-xl border">
             <span className="font-bold text-slate-700">🔄 Sincronització Automàtica Activa:</span>
             <span>Un cop vinculat o creat el fitxer JSON, cada canvi, valoració, o anotació que introdueixis es desa automàticament al fitxer JSON i en la memòria segura del navegador (LocalStorage). No cal prémer cap botó per desar.</span>
@@ -730,7 +908,7 @@ export default function App() {
               
               {/* Workspace Header for Selected Student */}
               <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                <div>
+                <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-xs font-semibold text-slate-500 flex items-center gap-1">
                       <GraduationCap size={14} />
@@ -741,9 +919,36 @@ export default function App() {
                       Creat el {new Date(activeTfm.createdAt).toLocaleDateString()}
                     </span>
                   </div>
-                  <h2 className="text-2xl font-black font-sans tracking-tight text-slate-800 mt-1">
-                    {activeTfm.studentName}
-                  </h2>
+                  
+                  {/* Inline editable Student Name */}
+                  <div className="mt-1.5">
+                    <input
+                      type="text"
+                      value={activeTfm.studentName}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        updateActiveTfm((prev) => ({ ...prev, studentName: val }));
+                      }}
+                      placeholder="Nom de l'estudiant"
+                      className="text-2xl font-black font-sans tracking-tight text-slate-800 bg-transparent focus:bg-slate-50 border-b border-transparent focus:border-slate-300 focus:outline-hidden hover:bg-slate-50/50 px-1 py-0.5 rounded-lg w-full transition-all focus:ring-1 focus:ring-indigo-150"
+                      title="Edita el nom de l'alumne directament"
+                    />
+                  </div>
+
+                  {/* Inline editable TFM Title */}
+                  <div className="mt-1">
+                    <input
+                      type="text"
+                      value={activeTfm.tfmTitle || ''}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        updateActiveTfm((prev) => ({ ...prev, tfmTitle: val }));
+                      }}
+                      placeholder="Fes clic per afegir el títol del TFM d'aquest alumne..."
+                      className="text-sm font-semibold text-slate-500 bg-transparent focus:bg-slate-50 border-b border-transparent focus:border-slate-300 focus:outline-hidden hover:bg-slate-50/50 px-1 py-0.5 rounded-lg w-full transition-all placeholder:text-slate-400 placeholder:italic focus:ring-1 focus:ring-indigo-150"
+                      title="Edita el títol del TFM directament"
+                    />
+                  </div>
                 </div>
 
                 {/* Switch Role Controls */}
@@ -1121,23 +1326,6 @@ export default function App() {
 
         </section>
       </main>
-
-      {/* Visual Workspace footer */}
-      <footer className="bg-slate-900 border-t border-slate-800 text-slate-400/80 text-xs mt-12">
-        <div className="max-w-7xl mx-auto px-4 py-8 flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex flex-col gap-1 text-center md:text-left">
-            <span className="font-extrabold text-white text-sm tracking-wide select-none">
-              AVALUACIÓ CONJUNTA TFM • UOC
-            </span>
-            <span>Unió del model del tutor i avaluador extern de la Formació de Professorat 2024.</span>
-          </div>
-
-          <div className="flex items-center gap-2 select-none">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 block animate-pulse" />
-            <span className="text-[11px] text-slate-400">Totalment segregat i emmagatzemat de manera segura a nivell local</span>
-          </div>
-        </div>
-      </footer>
 
     </div>
   );

@@ -15,6 +15,8 @@ export type RubricScoring = Record<string, CriterionScoring>;
 export interface TFM {
   id: string;
   studentName: string;
+  tfmTitle?: string;
+  directLinks?: { id: string; label: string; url: string }[];
   evaluatorRole: 'tutor' | 'avaluador'; // Default role initially set by creator, but can switch
   createdAt: string;
   updatedAt: string;
