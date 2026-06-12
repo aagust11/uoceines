@@ -1,6 +1,0 @@
-{
-  "name": "Avaluació TFM UOC",
-  "description": "Eina local d'avaluació conjunta de Treballs de Final de Màster (TFM) per a la UOC, amb suport de rúbriques del tutor i de l'avaluador extern, notes enriquides i emmagatzematge automàtic en fitxer JSON.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
