@@ -27,7 +27,7 @@ jobs:
       - name: Instal·la dependències
         run: |
           cd avaluaTFM
-          npm ci
+          npm install
 
       - name: Compila l'aplicació
         run: |
