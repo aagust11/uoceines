@@ -12,10 +12,17 @@ import {
   writeFileContents,
   readFileContents,
   clearStoredFileHandle,
+  saveDirectoryHandle,
+  getStoredDirectoryHandle,
+  clearStoredDirectoryHandle,
+  saveLocalPdf,
+  getLocalPdf,
+  deleteLocalPdf,
 } from './fileManager.ts';
 import RubricSection from './components/RubricSection.tsx';
 import EvaluationSummary from './components/EvaluationSummary.tsx';
 import RichTextEditor from './components/RichTextEditor.tsx';
+import PDFAnnotator from './components/PDFAnnotator.tsx';
 import {
   FileJson,
   Plus,
@@ -38,10 +45,10 @@ import {
   RotateCcw,
 } from 'lucide-react';
 
-// Prepopulated sample TFM consistent with the student name screenshot
+/// Prepopulated sample TFM consistent with the student name screenshot
 const SAMPLE_TFM: TFM = {
-  id: 'albert-mallol-miron-2024',
-  studentName: 'Albert Mallol Miron',
+  id: 'alumne-de-prova-2024',
+  studentName: "Alumne d'Exemple",
   tfmTitle: 'Disseny i avaluació d\'un programa de formació interactiu sobre competència digital docent',
   evaluatorRole: 'tutor',
   createdAt: new Date().toISOString(),
@@ -73,7 +80,8 @@ const SAMPLE_TFM: TFM = {
   },
   videoNotes: "<p><strong>Observacions generals de la presentació en vídeo:</strong></p><ul><li>Bona expressió corporal i seguretat en l'explicació.</li><li>Suport de diapositives clar i sense sobrecàrrega visual.</li><li>Vocalització i ritme adequats.</li></ul>",
   defensaNotes: "<p>La defensa s'ha desenvolupat correctament, l'estudiant respon amb confiança a les preguntes formulades per la comissió.</p>",
-  commonNotes: "<p>L'estudiant <strong>Albert Mallol Miron</strong> ha defensat el seu TFM demostrant un gran bagatge pràctic i teòric. S'aprecien competències adquirides de nivell excel·lent, especialment en el disseny i comunicació dels resultats de l'aprenentatge del professorat.</p>",
+  commonNotes: "<p>L'estudiant ha defensat el seu TFM demostrant un gran bagatge pràctic i teòric. S'aprecien competències adquirides de nivell excel·lent, especialment en el disseny i comunicació dels resultats de l'aprenentatge del professorat.</p>",
+  generalComments: "Comentari de prova: L'estudiant té un bon ritme d'explicació. Cal revisar la secció de conclusions del PDF per afegir referències més recents.",
 };
 
 const DEFAULT_GLOBAL_LINKS = [
@@ -84,8 +92,10 @@ const DEFAULT_GLOBAL_LINKS = [
 export default function App() {
   const [tfms, setTfms] = useState<TFM[]>([]);
   const [activeTfmId, setActiveTfmId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'proces' | 'treball' | 'video' | 'defensa' | 'comu' | 'summary'>('treball');
+  const [activeTab, setActiveTab] = useState<'proces' | 'treball' | 'video' | 'defensa' | 'comu' | 'summary' | 'pdf'>('treball');
   const [activeFileHandle, setActiveFileHandle] = useState<FileSystemFileHandle | null>(null);
+  const [activeDirectoryHandle, setActiveDirectoryHandle] = useState<FileSystemDirectoryHandle | null>(null);
+  const [activePdfBlob, setActivePdfBlob] = useState<Blob | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   
   // Create / Input student fields
@@ -93,6 +103,9 @@ export default function App() {
   const [newTfmTitle, setNewTfmTitle] = useState('');
   const [newDefaultRole, setNewDefaultRole] = useState<'tutor' | 'avaluador'>('tutor');
   const [isCreating, setIsCreating] = useState(false);
+
+  // Standalone full-viewport SpeedGrader state
+  const [isSpeedGraderOnly, setIsSpeedGraderOnly] = useState(false);
 
   // States for adding links inline (now globally shared)
   const [globalLinks, setGlobalLinks] = useState<{ id: string; label: string; url: string }[]>([]);
@@ -102,13 +115,25 @@ export default function App() {
 
   // 1. Initial State Load (LocalStorage Hot Cash Fallback + Checking previous DB Session file handle)
   useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const isGraderParam = urlParams.get('speedgrader') === 'true';
+    const tfmIdParam = urlParams.get('tfmId');
+
+    if (isGraderParam) {
+      setIsSpeedGraderOnly(true);
+      setActiveTab('pdf');
+    }
+
     const cached = localStorage.getItem('avaluacions_tfm_uoc_state');
     if (cached) {
       try {
         const parsed = JSON.parse(cached);
         if (parsed && Array.isArray(parsed)) {
           setTfms(parsed);
-          if (parsed.length > 0) {
+          
+          if (tfmIdParam && parsed.some(t => t.id === tfmIdParam)) {
+            setActiveTfmId(tfmIdParam);
+          } else if (parsed.length > 0) {
             setActiveTfmId(parsed[0].id);
           }
         }
@@ -141,6 +166,13 @@ export default function App() {
         setActiveFileHandle(handle);
       }
     });
+
+    // Check IndexedDB stored directory handle
+    getStoredDirectoryHandle().then((handle) => {
+      if (handle) {
+        setActiveDirectoryHandle(handle);
+      }
+    });
   }, []);
 
   // 2. LocalStorage sync side effect for absolute resiliency
@@ -158,6 +190,68 @@ export default function App() {
       localStorage.removeItem('avaluacions_tfm_uoc_global_links');
     }
   }, [globalLinks]);
+
+  // Synchronize state changes across independent windows (real-time SpeedGrader updates)
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'avaluacions_tfm_uoc_state' && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (parsed && Array.isArray(parsed)) {
+            setTfms(parsed);
+          }
+        } catch (err) {
+          console.error("Error sincronitzant l'estat local des del storage:", err);
+        }
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
+
+  // Load PDF for active student automatically
+  useEffect(() => {
+    if (!activeTfmId) {
+      setActivePdfBlob(null);
+      return;
+    }
+
+    let isCurrent = true;
+
+    async function loadPdf() {
+      try {
+        if (activeDirectoryHandle) {
+          try {
+            const pdfsDir = await activeDirectoryHandle.getDirectoryHandle('tfm_pdfs');
+            const pdfFile = await pdfsDir.getFileHandle(`${activeTfmId}.pdf`);
+            const file = await pdfFile.getFile();
+            if (isCurrent) {
+              setActivePdfBlob(file);
+              return;
+            }
+          } catch (e) {
+            console.log('PDF no trobat al directori de treball, buscant a la memòria local...');
+          }
+        }
+
+        const localBlob = await getLocalPdf(activeTfmId);
+        if (isCurrent) {
+          setActivePdfBlob(localBlob);
+        }
+      } catch (err) {
+        console.error("Error carregant el PDF per a l'estudiant actiu:", err);
+        if (isCurrent) {
+          setActivePdfBlob(null);
+        }
+      }
+    }
+
+    loadPdf();
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [activeTfmId, activeDirectoryHandle]);
 
   // 3. Automated File System Writer Trigger
   const triggerAutoSaveToFile = useCallback(async (currentTfms: TFM[], handle: FileSystemFileHandle) => {
@@ -183,6 +277,29 @@ export default function App() {
     }
   }, [tfms, activeFileHandle, triggerAutoSaveToFile]);
 
+  // Sync to directory whenever tfms changes
+  const triggerAutoSaveToDir = useCallback(async (currentTfms: TFM[], dirHandle: FileSystemDirectoryHandle) => {
+    try {
+      setFileError(null);
+      const payload = {
+        version: '1.0',
+        lastUpdated: new Date().toISOString(),
+        tfms: currentTfms,
+      };
+      const fileHandle = await dirHandle.getFileHandle('avaluacions.json', { create: true });
+      await writeFileContents(fileHandle, JSON.stringify(payload, null, 2));
+    } catch (err: any) {
+      console.error('Error escrivint al directori en desar automàticament:', err);
+      setFileError("No s'ha pogut desar automàticament al directori de treball (falten permisos d'escriptura).");
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeDirectoryHandle && tfms.length > 0) {
+      triggerAutoSaveToDir(tfms, activeDirectoryHandle);
+    }
+  }, [tfms, activeDirectoryHandle, triggerAutoSaveToDir]);
+
   // Try to connect to existing file handle (requests permission dialog from user onClick)
   const reconnectFileHandle = async () => {
     if (!activeFileHandle) return;
@@ -200,6 +317,106 @@ export default function App() {
     } catch (err: any) {
       console.error('Error recuperant permís del fitxer:', err);
       setFileError("S'ha denegat o ha fallat la llicència de lectura per al fitxer seleccionat.");
+    }
+  };
+
+  // Reconnect active directory handle
+  const reconnectDirectoryHandle = async () => {
+    if (!activeDirectoryHandle) return;
+    try {
+      setFileError(null);
+      const options = { mode: 'readwrite' as const };
+      if ((await (activeDirectoryHandle as any).queryPermission(options)) !== 'granted') {
+        const requested = await (activeDirectoryHandle as any).requestPermission(options);
+        if (requested !== 'granted') {
+          throw new Error("No s'han obtingut els permisos necessaris per a la carpeta de treball.");
+        }
+      }
+
+      const fileHandle = await activeDirectoryHandle.getFileHandle('avaluacions.json');
+      const content = await readFileContents(fileHandle);
+      const parsed = JSON.parse(content);
+      if (parsed && Array.isArray(parsed.tfms)) {
+        setTfms(parsed.tfms);
+        if (parsed.tfms.length > 0) {
+          setActiveTfmId(parsed.tfms[0].id);
+        }
+      }
+      setFileError(`✅ Carpeta de treball restablerta i sincronitzada!`);
+      setTimeout(() => setFileError(null), 5000);
+    } catch (err: any) {
+      console.error('Error recuperant permís de la carpeta:', err);
+      setFileError("⚠️ Cal aprovar el diàleg de permís per connectar la carpeta local al navegador.");
+    }
+  };
+
+  // Connect to directory picker
+  const handleOpenLocalDirectory = async () => {
+    try {
+      setFileError(null);
+      if (!('showDirectoryPicker' in window)) {
+        throw new Error('API_NOT_SUPPORTED');
+      }
+
+      const dirHandle = await (window as any).showDirectoryPicker();
+      if (dirHandle) {
+        let loadedTfms = tfms;
+        try {
+          const fileHandle = await dirHandle.getFileHandle('avaluacions.json');
+          const content = await readFileContents(fileHandle);
+          const parsed = JSON.parse(content);
+          if (parsed && Array.isArray(parsed.tfms)) {
+            loadedTfms = parsed.tfms;
+          } else if (Array.isArray(parsed)) {
+            loadedTfms = parsed;
+          }
+          setFileError(`📂 Carpeta vinculada! S'han carregat correctament ${loadedTfms.length} TFM.`);
+        } catch (fileErr) {
+          const fileHandle = await dirHandle.getFileHandle('avaluacions.json', { create: true });
+          const payload = {
+            version: '1.0',
+            lastUpdated: new Date().toISOString(),
+            tfms: tfms,
+          };
+          await writeFileContents(fileHandle, JSON.stringify(payload, null, 2));
+          setFileError(`📂 Nova Carpeta vinculada! S'ha creat "avaluacions.json" de forma automàtica.`);
+        }
+
+        setTfms(loadedTfms);
+        if (loadedTfms.length > 0) {
+          setActiveTfmId(loadedTfms[0].id);
+        }
+
+        setActiveDirectoryHandle(dirHandle);
+        await saveDirectoryHandle(dirHandle);
+        setTimeout(() => setFileError(null), 8000);
+      }
+    } catch (err: any) {
+      if (err.name === 'AbortError') return;
+      console.error('Error connectant la carpeta local:', err);
+
+      const isIframeConstraint =
+        err.name === 'SecurityError' ||
+        err.message?.includes('sub-frame') ||
+        err.message?.includes('sub frame') ||
+        err.message?.includes('SecurityError') ||
+        err.message?.includes('cross-origin') ||
+        err.message?.includes('allowed') ||
+        err.message?.includes('showDirectoryPicker') ||
+        err.message === 'API_NOT_SUPPORTED';
+
+      if (isIframeConstraint) {
+        setFileError("⚠️ L'entorn limita la vinculació directa de carpetes (Iframe actiu). Utilitzant memòria local de resiliència.");
+      } else {
+        setFileError(`No s'ha pogut connectar la carpeta: ${err.message || err}.`);
+      }
+    }
+  };
+
+  const handleDisconnectDirectory = async () => {
+    if (confirm('Vols desconnectar la carpeta de treball activa? Les dades continuaran desades a la memòria local (LocalStorage).')) {
+      setActiveDirectoryHandle(null);
+      await clearStoredDirectoryHandle();
     }
   };
 
@@ -413,6 +630,7 @@ export default function App() {
       videoNotes: '',
       defensaNotes: '',
       commonNotes: '',
+      generalComments: '',
     };
 
     setTfms((prev) => [newTfm, ...prev]);
@@ -450,6 +668,69 @@ export default function App() {
     );
   };
 
+  const handleUploadPdf = async (blob: Blob, name: string) => {
+    if (!activeTfmId) return;
+
+    try {
+      // 1. Save to local IndexedDB fallback
+      await saveLocalPdf(activeTfmId, blob);
+
+      // 2. If directory handle is active, save in subfolder alongside JSON
+      if (activeDirectoryHandle) {
+        try {
+          const pdfsDir = await activeDirectoryHandle.getDirectoryHandle('tfm_pdfs', { create: true });
+          const fileHandle = await pdfsDir.getFileHandle(`${activeTfmId}.pdf`, { create: true });
+          const writable = await (fileHandle as any).createWritable();
+          await writable.write(blob);
+          await writable.close();
+          console.log(`PDF desat amb èxit al directori del projecte: tfm_pdfs/${activeTfmId}.pdf`);
+        } catch (dirErr) {
+          console.error('Error desant el PDF al directori actiu:', dirErr);
+          setFileError("⚠️ No s'ha pogut escriure el PDF al directori del disc. S'ha desat a la memòria del navegador.");
+        }
+      }
+
+      // 3. Update state
+      setActivePdfBlob(blob);
+      updateActiveTfm((prev) => ({
+        ...prev,
+        pdfFileName: name,
+        pdfAnnotations: prev.pdfAnnotations || []
+      }));
+    } catch (err: any) {
+      console.error('Error de pujada de PDF:', err);
+      alert('Error de pujada: ' + err.message);
+    }
+  };
+
+  const handleRemovePdf = async () => {
+    if (!activeTfmId) return;
+
+    if (confirm('Esteu segur que voleu eliminar aquest document vinculat? Es perdran de forma irreversible els comentaris del SpeedGrader aplicats.')) {
+      try {
+        await deleteLocalPdf(activeTfmId);
+
+        if (activeDirectoryHandle) {
+          try {
+            const pdfsDir = await activeDirectoryHandle.getDirectoryHandle('tfm_pdfs');
+            await (pdfsDir as any).removeEntry(`${activeTfmId}.pdf`);
+          } catch (e) {
+            console.log('No s’ha pogut esborrar el fitxer del disc de treball (potser ja no existia).');
+          }
+        }
+
+        setActivePdfBlob(null);
+        updateActiveTfm((prev) => ({
+          ...prev,
+          pdfFileName: undefined,
+          pdfAnnotations: []
+        }));
+      } catch (err: any) {
+        console.error('Error removent PDF:', err);
+      }
+    }
+  };
+
   const handleAddLink = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newLinkLabel.trim() || !newLinkUrl.trim()) return;
@@ -476,6 +757,47 @@ export default function App() {
   // Active student object helper
   const activeTfm = tfms.find((t) => t.id === activeTfmId) || null;
 
+  if (isSpeedGraderOnly) {
+    return (
+      <div className="bg-slate-900 text-white min-h-screen font-sans flex flex-col justify-between selection:bg-indigo-900">
+        <div className="flex-1 p-3 md:p-5">
+          {activeTfm ? (
+            <PDFAnnotator
+              tfmId={activeTfm.id}
+              pdfFileName={activeTfm.pdfFileName || null}
+              annotations={activeTfm.pdfAnnotations || []}
+              pdfBlob={activePdfBlob}
+              onSaveAnnotations={(updatedAnns) => {
+                updateActiveTfm((prev) => ({
+                  ...prev,
+                  pdfAnnotations: updatedAnns
+                }));
+              }}
+              onUploadPdf={handleUploadPdf}
+              onRemovePdf={handleRemovePdf}
+              generalComments={activeTfm.generalComments || ''}
+              onSaveGeneralComments={(newComments) => {
+                updateActiveTfm((prev) => ({
+                  ...prev,
+                  generalComments: newComments
+                }));
+              }}
+              isStandalone={true}
+            />
+          ) : (
+            <div className="max-w-md mx-auto my-12 p-8 bg-slate-800 border border-slate-700 rounded-2xl text-center shadow-2xl">
+              <BookOpen size={40} className="mx-auto text-slate-500 mb-4 animate-bounce" />
+              <h3 className="text-base font-black text-slate-100">Sincronitzant l'SpeedGrader...</h3>
+              <p className="text-slate-400 text-xs mt-2 leading-relaxed">
+                Assegureu-vos que teniu dades desades al navegador. Els canvis es sincronitzen de forma automàtica.
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="bg-slate-50 text-slate-900 min-h-screen font-sans flex flex-col justify-between">
       
@@ -498,19 +820,71 @@ export default function App() {
             </div>
           </div>
 
-          {/* Local File Management Controls */}
+          {/* Local File & Folder Management Controls */}
           <div className="flex flex-wrap items-center gap-2">
+            
+            {/* Active Directory Workspace Handle */}
+            {activeDirectoryHandle ? (
+              <div className="flex items-center bg-indigo-50 border border-indigo-150 px-3 py-1.5 rounded-xl text-xs gap-3">
+                <span className="flex items-center gap-1.5 font-bold text-indigo-800">
+                  <span className="flex h-2 w-2 relative">
+                    <span className="animate-ping inline-flex absolute h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-650"></span>
+                  </span>
+                  <span>📂 Carpeta Activa: Treball de TFM</span>
+                </span>
+                
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={reconnectDirectoryHandle}
+                    className="hover:bg-indigo-100 border border-indigo-200 text-[10px] text-indigo-700 font-bold px-2 py-0.5 rounded-md transition-colors"
+                    title="Sol·licita o refresca permisos de lectura/escriptura de la carpeta"
+                  >
+                    Activa permisos
+                  </button>
+                  <span className="w-px h-3 bg-indigo-200" />
+                  <button
+                    type="button"
+                    onClick={handleDisconnectDirectory}
+                    className="hover:bg-rose-150 px-2 py-0.5 text-rose-700 font-bold uppercase rounded-md transition-colors text-[10px]"
+                  >
+                    Desconnecta carpeta
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={handleOpenLocalDirectory}
+                className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-indigo-750 hover:text-indigo-950 bg-indigo-50 border border-indigo-150 shadow-3xs rounded-xl hover:bg-indigo-100 transition-colors cursor-pointer"
+                title="Vincula una carpeta sencera del teu ordinador per sincronitzar tant el fitxer JSON com els PDF dels estudiants"
+              >
+                <FolderOpen size={13} className="text-indigo-650" />
+                <span>Vincula Carpeta de Treball (JSON + PDFs)</span>
+              </button>
+            )}
+
+            {/* Standalone JSON file handle */}
             {activeFileHandle ? (
               <div className="flex items-center bg-emerald-50 border border-emerald-150 px-3.5 py-1.5 rounded-xl text-xs gap-3">
                 <span className="flex items-center gap-1.5 font-bold text-emerald-800">
                   <span className="flex h-2 w-2 relative">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-550"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-555"></span>
                   </span>
-                  <span>Sincronitzat en directe: {activeFileHandle.name}</span>
+                  <span>Fitxer JSON: {activeFileHandle.name}</span>
                 </span>
                 
                 <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={reconnectFileHandle}
+                    className="hover:bg-emerald-100 border border-emerald-200 text-[10px] text-emerald-700 font-bold px-2 py-0.5 rounded-md transition-colors"
+                    title="Sol·licita o refresca permisos de fitxer"
+                  >
+                    Activa permís
+                  </button>
                   <span className="w-px h-3 bg-emerald-200" />
                   <button
                     id="disconnect-file-btn"
@@ -522,13 +896,13 @@ export default function App() {
                   </button>
                 </div>
               </div>
-            ) : (
+            ) : !activeDirectoryHandle && (
               <div className="flex items-center bg-slate-100 border border-slate-200 p-1.5 rounded-xl gap-1">
                 <button
                   id="open-local-file-btn"
                   type="button"
                   onClick={handleOpenLocalFile}
-                  className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-slate-700 hover:text-slate-900 bg-white shadow-xs rounded-lg hover:bg-slate-50 transition-colors"
+                  className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-slate-700 hover:text-slate-900 bg-white shadow-xs rounded-lg hover:bg-slate-50 transition-colors cursor-pointer"
                   title="Vincula un fitxer JSON del teu ordinador per desar-hi els canvis de forma automàtica"
                 >
                   <FolderOpen size={13} />
@@ -538,7 +912,7 @@ export default function App() {
                   id="create-new-file-btn"
                   type="button"
                   onClick={handleCreateNewFile}
-                  className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors border border-emerald-150 animate-pulse"
+                  className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors border border-emerald-150 cursor-pointer"
                   title="Crea un nou fitxer JSON on es desaran de forma automàtica totes les qualificacions en directe"
                 >
                   <Plus size={13} />
@@ -553,15 +927,15 @@ export default function App() {
                 id="legacy-export-btn"
                 type="button"
                 onClick={handleLegacyExport}
-                className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-colors"
+                className="p-2 bg-slate-100 hover:bg-slate-205 text-slate-700 rounded-xl transition-colors cursor-pointer"
                 title="Descarrega una còpia JSON al vol"
               >
                 <Download size={14} />
               </button>
               <label
                 htmlFor="legacy-import-input"
-                className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl cursor-pointer transition-colors"
-                title="Carrega una còpia JSON"
+                className="p-2 bg-slate-100 hover:bg-slate-205 text-slate-700 rounded-xl cursor-pointer transition-colors"
+                title="Carrega una còpia JSON de seguretat"
               >
                 <Upload size={14} />
                 <input
@@ -662,7 +1036,7 @@ export default function App() {
                   required
                   value={newStudentName}
                   onChange={(e) => setNewStudentName(e.target.value)}
-                  placeholder="Ex: Albert Mallol Miron"
+                  placeholder="Ex: Joana Soler i Martí"
                   className="w-full text-xs border border-slate-200 rounded-lg p-2 focus:outline-hidden focus:border-indigo-500 bg-white"
                 />
               </div>
@@ -1075,6 +1449,22 @@ export default function App() {
                   </>
                 )}
 
+                {/* SpeedGrader PDF (Shared by both roles) */}
+                <button
+                  id="tab-pdf"
+                  type="button"
+                  onClick={() => setActiveTab('pdf')}
+                  className={`px-4 py-2.5 text-xs font-bold uppercase tracking-wider border-b-2 transition-all whitespace-nowrap flex items-center gap-1 bg-amber-500/5 rounded-t-lg ${
+                    activeTab === 'pdf'
+                      ? 'border-amber-500 text-amber-700 font-extrabold bg-amber-500/10'
+                      : 'border-transparent text-slate-550 hover:text-slate-800 animate-pulse'
+                  }`}
+                  title="Interfície interactiva d'SpeedGrader per visualitzar, subratllar i penjar el PDF de l'alumne"
+                >
+                  <Sparkles size={12.5} className="text-amber-550" />
+                  <span>📄 SpeedGrader PDF</span>
+                </button>
+
                 <div className="flex-1" />
 
                 {/* Summary View Tab for both worlds */}
@@ -1294,9 +1684,63 @@ export default function App() {
                 </div>
               )}
 
+              {/* Tab: SpeedGrader / PDF Document (Both roles) */}
+              {activeTab === 'pdf' && (
+                <PDFAnnotator
+                  tfmId={activeTfm.id}
+                  pdfFileName={activeTfm.pdfFileName || null}
+                  annotations={activeTfm.pdfAnnotations || []}
+                  pdfBlob={activePdfBlob}
+                  onSaveAnnotations={(updatedAnns) => {
+                    updateActiveTfm((prev) => ({
+                      ...prev,
+                      pdfAnnotations: updatedAnns
+                    }));
+                  }}
+                  onUploadPdf={handleUploadPdf}
+                  onRemovePdf={handleRemovePdf}
+                  generalComments={activeTfm.generalComments || ''}
+                  onSaveGeneralComments={(newComments) => {
+                    updateActiveTfm((prev) => ({
+                      ...prev,
+                      generalComments: newComments
+                    }));
+                  }}
+                />
+              )}
+
               {/* Tab 6: Summary Scores and Copy Report Acta (Both roles) */}
               {activeTab === 'summary' && (
                 <EvaluationSummary tfm={activeTfm} />
+              )}
+
+              {/* General Comments Box synchronized across all normal evaluation tabs (Except PDF tab which has floating window) */}
+              {activeTab !== 'pdf' && (
+                <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-xs flex flex-col gap-3 mt-4 border-l-4 border-l-indigo-600">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-extrabold uppercase tracking-widest text-slate-700 flex items-center gap-1.5 select-none">
+                      <Sparkles size={13} className="text-indigo-600 animate-pulse" />
+                      <span>✍️ Comentaris Generals (Actiu a totes les pestanyes)</span>
+                    </h3>
+                    <span className="text-[10px] text-slate-400 font-extrabold bg-slate-50 px-2 py-0.5 rounded-full select-none">
+                      Sincronitzat
+                    </span>
+                  </div>
+                  <textarea
+                    id="cockpit-general-comments-textarea"
+                    rows={4}
+                    value={activeTfm.generalComments || ''}
+                    onChange={(e) => {
+                      const updatedComments = e.target.value;
+                      updateActiveTfm((prev) => ({
+                        ...prev,
+                        generalComments: updatedComments
+                      }));
+                    }}
+                    placeholder="Escriu observacions combinades, oratòria de l'acte de defensa presencial, o comentaris del bloc escrit unificat d'aquest alumne aquí..."
+                    className="w-full text-xs font-semibold text-slate-800 border border-slate-205 rounded-xl p-3 focus:outline-hidden focus:border-indigo-500 bg-slate-50/20 focus:bg-white transition-all duration-100 shadow-2xs leading-relaxed font-sans"
+                  />
+                </div>
               )}
 
             </div>
@@ -1319,7 +1763,7 @@ export default function App() {
                 }}
                 className="mt-5 text-xs font-bold uppercase tracking-wider bg-indigo-50 text-indigo-700 px-4 py-2 rounded-xl border border-indigo-100 hover:bg-indigo-150 transition-colors"
               >
-                Carrega Estudiant d'Exemple (Albert Mallol Miron)
+                Carrega Estudiant de Prova (Alumne d'Exemple)
               </button>
             </div>
           )}

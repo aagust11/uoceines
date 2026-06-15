@@ -133,7 +133,7 @@ export default function EvaluationSummary({ tfm }: EvaluationSummaryProps) {
       <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px; margin-top: 10px;">
         <tr>
           <td style="padding: 6px 0; font-weight: bold; color: #475569; width: 150px;">Estudiant:</td>
-          <td style="padding: 6px 0; color: #1e293b; font-size: 15px;">${tfm.studentName || 'Albert Mallol Miron'}</td>
+          <td style="padding: 6px 0; color: #1e293b; font-size: 15px;">${tfm.studentName || "Alumne d'Exemple"}</td>
         </tr>
         <tr>
           <td style="padding: 6px 0; font-weight: bold; color: #475569;">Qualificació Final:</td>
@@ -233,7 +233,7 @@ export default function EvaluationSummary({ tfm }: EvaluationSummaryProps) {
               QUALIFICACIÓ GLOBAL CONJUNTA
             </span>
             <h3 className="text-xl font-bold font-sans tracking-tight mt-1 text-slate-100">
-              {tfm.studentName || 'Albert Mallol Miron'}
+              {tfm.studentName || "Alumne d'Exemple"}
             </h3>
           </div>
           

@@ -226,26 +226,95 @@ export default function RubricSection({
                 {/* Collapsible Guideline levels */}
                 {isDescriptionExpanded && (
                   <div className="mt-4 bg-slate-50 border border-slate-100 rounded-xl p-4 text-xs text-slate-600 flex flex-col gap-2.5 leading-relaxed">
-                    <p className="font-semibold text-slate-700 uppercase tracking-widest text-[10px] pb-1 border-b border-slate-200/50">
-                      Indicadors de nivell d'avaluació:
-                    </p>
+                    <div className="flex items-center justify-between pb-1 border-b border-slate-200/50">
+                      <p className="font-semibold text-slate-700 uppercase tracking-widest text-[10px]">
+                        Indicadors de nivell d'avaluació (Fes clic en un nivell per puntuar directament):
+                      </p>
+                    </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-1">
-                      <div className="p-2.5 border border-slate-200 rounded-lg bg-white">
-                        <span className="font-bold text-rose-700 block mb-0.5">Nivell 1 (Insuficient):</span>
+                      {/* Nivell 1 */}
+                      <button
+                        type="button"
+                        disabled={readOnly}
+                        onClick={() => handleLevelChange(criterion.id, 1)}
+                        className={`text-left p-2.5 border rounded-lg transition-all ${
+                          readOnly ? '' : 'cursor-pointer hover:border-rose-400 hover:ring-2 hover:ring-rose-500/10 hover:bg-rose-50/10'
+                        } ${
+                          itemScoring.level === 1
+                            ? 'border-rose-500 bg-rose-50/30 ring-4 ring-rose-500/5 font-medium text-slate-800'
+                            : 'border-slate-200 bg-white'
+                        }`}
+                        title="Selecciona Nivell 1: Insuficient"
+                      >
+                        <span className="font-bold text-rose-700 block mb-0.5 flex items-center justify-between">
+                          <span>Nivell 1 (Insuficient)</span>
+                          {itemScoring.level === 1 && <span className="text-[10px] bg-rose-650 text-white px-1.5 py-0.5 rounded-sm">Actiu</span>}
+                        </span>
                         {criterion.levels[1]}
-                      </div>
-                      <div className="p-2.5 border border-slate-200 rounded-lg bg-white">
-                        <span className="font-bold text-amber-700 block mb-0.5">Nivell 2 (Adequat):</span>
+                      </button>
+
+                      {/* Nivell 2 */}
+                      <button
+                        type="button"
+                        disabled={readOnly}
+                        onClick={() => handleLevelChange(criterion.id, 2)}
+                        className={`text-left p-2.5 border rounded-lg transition-all ${
+                          readOnly ? '' : 'cursor-pointer hover:border-amber-400 hover:ring-2 hover:ring-amber-500/10 hover:bg-amber-50/10'
+                        } ${
+                          itemScoring.level === 2
+                            ? 'border-amber-500 bg-amber-50/30 ring-4 ring-amber-500/5 font-medium text-slate-800'
+                            : 'border-slate-200 bg-white'
+                        }`}
+                        title="Selecciona Nivell 2: Adequat"
+                      >
+                        <span className="font-bold text-amber-700 block mb-0.5 flex items-center justify-between">
+                          <span>Nivell 2 (Adequat)</span>
+                          {itemScoring.level === 2 && <span className="text-[10px] bg-amber-500 text-white px-1.5 py-0.5 rounded-sm">Actiu</span>}
+                        </span>
                         {criterion.levels[2]}
-                      </div>
-                      <div className="p-2.5 border border-slate-200 rounded-lg bg-white">
-                        <span className="font-bold text-blue-700 block mb-0.5">Nivell 3 (Bo):</span>
+                      </button>
+
+                      {/* Nivell 3 */}
+                      <button
+                        type="button"
+                        disabled={readOnly}
+                        onClick={() => handleLevelChange(criterion.id, 3)}
+                        className={`text-left p-2.5 border rounded-lg transition-all ${
+                          readOnly ? '' : 'cursor-pointer hover:border-blue-400 hover:ring-2 hover:ring-blue-500/10 hover:bg-blue-50/10'
+                        } ${
+                          itemScoring.level === 3
+                            ? 'border-blue-500 bg-blue-50/30 ring-4 ring-blue-500/5 font-medium text-slate-800'
+                            : 'border-slate-200 bg-white'
+                        }`}
+                        title="Selecciona Nivell 3: Bo"
+                      >
+                        <span className="font-bold text-blue-700 block mb-0.5 flex items-center justify-between">
+                          <span>Nivell 3 (Bo)</span>
+                          {itemScoring.level === 3 && <span className="text-[10px] bg-blue-600 text-white px-1.5 py-0.5 rounded-sm">Actiu</span>}
+                        </span>
                         {criterion.levels[3]}
-                      </div>
-                      <div className="p-2.5 border border-emerald-200 rounded-lg bg-emerald-50/30">
-                        <span className="font-bold text-emerald-700 block mb-0.5">Nivell 4 (Excel·lent):</span>
+                      </button>
+
+                      {/* Nivell 4 */}
+                      <button
+                        type="button"
+                        disabled={readOnly}
+                        onClick={() => handleLevelChange(criterion.id, 4)}
+                        className={`text-left p-2.5 border rounded-lg transition-all ${
+                          readOnly ? '' : 'cursor-pointer hover:border-emerald-400 hover:ring-2 hover:ring-emerald-500/10 hover:bg-emerald-50/10'
+                        } ${
+                          itemScoring.level === 4
+                            ? 'border-emerald-500 bg-emerald-50/30 ring-4 ring-emerald-500/5 font-medium text-slate-800'
+                            : 'border-emerald-200 bg-emerald-50/10'
+                        }`}
+                        title="Selecciona Nivell 4: Excel·lent"
+                      >
+                        <span className="font-bold text-emerald-700 block mb-0.5 flex items-center justify-between">
+                          <span>Nivell 4 (Excel·lent)</span>
+                          {itemScoring.level === 4 && <span className="text-[10px] bg-emerald-600 text-white px-1.5 py-0.5 rounded-sm">Actiu</span>}
+                        </span>
                         {criterion.levels[4]}
-                      </div>
+                      </button>
                     </div>
                   </div>
                 )}

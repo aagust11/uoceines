@@ -12,11 +12,29 @@ export interface CriterionScoring {
 
 export type RubricScoring = Record<string, CriterionScoring>;
 
+export interface PDFAnnotation {
+  id: string;
+  type: 'pin' | 'highlight' | 'draw' | 'text';
+  pageNumber: number;
+  x: number; // Percentage from left (0 to 100)
+  y: number; // Percentage from top (0 to 100)
+  width?: number; // Percentage width
+  height?: number; // Percentage height
+  color: string; // e.g. '#ef4444', '#10b981', '#f59e0b', '#3b82f6'
+  icon?: string; // 'check' | 'close' | 'question' | 'star' | 'comment'
+  text?: string; // Comment text or text label
+  points?: { x: number; y: number }[]; // Percentage coordinates for drawings
+  createdAt?: string;
+}
+
 export interface TFM {
   id: string;
   studentName: string;
   tfmTitle?: string;
   directLinks?: { id: string; label: string; url: string }[];
+  pdfFileName?: string;
+  pdfAnnotations?: PDFAnnotation[];
+  generalComments?: string;
   evaluatorRole: 'tutor' | 'avaluador'; // Default role initially set by creator, but can switch
   createdAt: string;
   updatedAt: string;
