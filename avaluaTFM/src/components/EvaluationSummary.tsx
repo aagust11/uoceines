@@ -10,9 +10,17 @@ import { Clipboard, Check, Trophy, FileText, UserCheck, AlertCircle, Sparkles } 
 
 interface EvaluationSummaryProps {
   tfm: TFM;
+  treballCriteria?: typeof TREBALL_CRITERIA;
+  videoCriteria?: typeof VIDEO_CRITERIA;
+  defensaCriteria?: typeof DEFENSA_CRITERIA;
 }
 
-export default function EvaluationSummary({ tfm }: EvaluationSummaryProps) {
+export default function EvaluationSummary({
+  tfm,
+  treballCriteria = TREBALL_CRITERIA,
+  videoCriteria = VIDEO_CRITERIA,
+  defensaCriteria = DEFENSA_CRITERIA,
+}: EvaluationSummaryProps) {
   const [copied, setCopied] = useState(false);
 
   // Helper to compute a single evaluator's Section 2 Treball score based on evaluated items
@@ -21,7 +29,7 @@ export default function EvaluationSummary({ tfm }: EvaluationSummaryProps) {
     let earnedWeight = 0;
     let evaluatedCount = 0;
 
-    TREBALL_CRITERIA.forEach((c) => {
+    treballCriteria.forEach((c) => {
       const scoringState = rubric[c.id];
       if (scoringState && scoringState.level !== null) {
         evaluatedCount++;
@@ -30,11 +38,11 @@ export default function EvaluationSummary({ tfm }: EvaluationSummaryProps) {
       }
     });
 
-    if (evaluatedCount === 0) return { score: 0, count: 0, total: TREBALL_CRITERIA.length };
+    if (evaluatedCount === 0) return { score: 0, count: 0, total: treballCriteria.length };
     return {
-      score: (earnedWeight / totalWeight) * 10,
+      score: totalWeight > 0 ? (earnedWeight / totalWeight) * 10 : 0,
       count: evaluatedCount,
-      total: TREBALL_CRITERIA.length,
+      total: treballCriteria.length,
     };
   };
 
@@ -66,7 +74,7 @@ export default function EvaluationSummary({ tfm }: EvaluationSummaryProps) {
     let evaluatedCount = 0;
 
     // Video portion
-    VIDEO_CRITERIA.forEach((c) => {
+    videoCriteria.forEach((c) => {
       const scoringState = tfm.videoRubric[c.id];
       if (scoringState && scoringState.level !== null) {
         evaluatedCount++;
@@ -76,7 +84,7 @@ export default function EvaluationSummary({ tfm }: EvaluationSummaryProps) {
     });
 
     // Defensa portion
-    DEFENSA_CRITERIA.forEach((c) => {
+    defensaCriteria.forEach((c) => {
       const scoringState = tfm.defensaRubric[c.id];
       if (scoringState && scoringState.level !== null) {
         evaluatedCount++;
@@ -85,11 +93,12 @@ export default function EvaluationSummary({ tfm }: EvaluationSummaryProps) {
       }
     });
 
-    if (evaluatedCount === 0) return { score: 0, count: 0, total: 6 };
+    const totalAllowed = videoCriteria.length + defensaCriteria.length;
+    if (evaluatedCount === 0) return { score: 0, count: 0, total: totalAllowed };
     return {
-      score: (earnedWeight / totalWeight) * 10,
+      score: totalWeight > 0 ? (earnedWeight / totalWeight) * 10 : 0,
       count: evaluatedCount,
-      total: 6,
+      total: totalAllowed,
     };
   };
 
@@ -151,7 +160,7 @@ export default function EvaluationSummary({ tfm }: EvaluationSummaryProps) {
       <p style="font-size: 13px; color: #64748b;"><em>Resum dels criteris avaluats per les dues parts (Tutor i Avaluador Extern):</em></p>
       <ul style="font-size: 13.5px; padding-left: 20px; margin-top: 6px;">`;
 
-    TREBALL_CRITERIA.forEach((c) => {
+    treballCriteria.forEach((c) => {
       const tState = tfm.tutorRubric[c.id];
       const aState = tfm.avaluadorRubric[c.id];
       if ((tState && tState.level) || (aState && aState.level)) {
@@ -171,12 +180,12 @@ export default function EvaluationSummary({ tfm }: EvaluationSummaryProps) {
       <p style="font-size: 14px; margin: 8px 0;"><strong>Qualificació Vídeo i Defensa:</strong> ${defensaSummary.score.toFixed(2)} sobre 10</p>
       
       <table style="width: 100%; font-size: 13px; text-align: left; margin-top: 8px; border: 1px solid #f1f5f9; border-collapse: collapse;">
-        <tr style="background: #f8fafc;">
+         <tr style="background: #f8fafc;">
           <th style="padding: 6px; border: 1px solid #f1f5f9;">Criteri de Vídeo o Defensa</th>
           <th style="padding: 6px; border: 1px solid #f1f5f9; width: 80px;">Nivell (1-4)</th>
         </tr>`;
 
-    VIDEO_CRITERIA.forEach((c) => {
+    videoCriteria.forEach((c) => {
       const vState = tfm.videoRubric[c.id];
       html += `<tr>
         <td style="padding: 6px; border: 1px solid #f1f5f9;">${c.name.split(' (')[0]} (Vídeo)</td>
@@ -184,7 +193,7 @@ export default function EvaluationSummary({ tfm }: EvaluationSummaryProps) {
       </tr>`;
     });
 
-    DEFENSA_CRITERIA.forEach((c) => {
+    defensaCriteria.forEach((c) => {
       const dState = tfm.defensaRubric[c.id];
       html += `<tr>
         <td style="padding: 6px; border: 1px solid #f1f5f9;">${c.name.split(' (')[0]} (Defensa)</td>
@@ -327,7 +336,7 @@ export default function EvaluationSummary({ tfm }: EvaluationSummaryProps) {
           </div>
           
           {/* Missing data alert block */}
-          {(tutorTreball.count < TREBALL_CRITERIA.length || avaluadorTreball.count < TREBALL_CRITERIA.length || defensaSummary.count < 6) && (
+          {(tutorTreball.count < treballCriteria.length || avaluadorTreball.count < treballCriteria.length || defensaSummary.count < (videoCriteria.length + defensaCriteria.length)) && (
             <div className="flex items-center gap-2 text-rose-700 bg-rose-50 px-3 py-2 rounded-xl text-xs border border-rose-200/50 mt-1">
               <AlertCircle size={14} className="flex-shrink-0" />
               <span>

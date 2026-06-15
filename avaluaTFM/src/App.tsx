@@ -92,12 +92,60 @@ const DEFAULT_GLOBAL_LINKS = [
 export default function App() {
   const [tfms, setTfms] = useState<TFM[]>([]);
   const [activeTfmId, setActiveTfmId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'proces' | 'treball' | 'video' | 'defensa' | 'comu' | 'summary' | 'pdf'>('treball');
+  const [activeTab, setActiveTab] = useState<'proces' | 'treball' | 'video' | 'defensa' | 'comu' | 'summary' | 'pdf' | 'config'>('treball');
   const [activeFileHandle, setActiveFileHandle] = useState<FileSystemFileHandle | null>(null);
   const [activeDirectoryHandle, setActiveDirectoryHandle] = useState<FileSystemDirectoryHandle | null>(null);
   const [activePdfBlob, setActivePdfBlob] = useState<Blob | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   
+  // Custom expandable criteria states synced with LocalStorage for fully persistent resilience
+  const [treballCriteria, setTreballCriteria] = useState<any[]>(() => {
+    const cached = localStorage.getItem('avaluacions_tfm_uoc_criteria_treball');
+    if (cached) {
+      try { return JSON.parse(cached); } catch (e) { console.error(e); }
+    }
+    return TREBALL_CRITERIA;
+  });
+
+  const [videoCriteria, setVideoCriteria] = useState<any[]>(() => {
+    const cached = localStorage.getItem('avaluacions_tfm_uoc_criteria_video');
+    if (cached) {
+      try { return JSON.parse(cached); } catch (e) { console.error(e); }
+    }
+    return VIDEO_CRITERIA;
+  });
+
+  const [defensaCriteria, setDefensaCriteria] = useState<any[]>(() => {
+    const cached = localStorage.getItem('avaluacions_tfm_uoc_criteria_defensa');
+    if (cached) {
+      try { return JSON.parse(cached); } catch (e) { console.error(e); }
+    }
+    return DEFENSA_CRITERIA;
+  });
+
+  const [globalBg, setGlobalBg] = useState<'white' | 'gray'>(() => {
+    const cached = localStorage.getItem('avaluacions_tfm_uoc_global_bg');
+    return (cached === 'white' || cached === 'gray') ? cached : 'gray';
+  });
+
+  const [settingsActiveSubTab, setSettingsActiveSubTab] = useState<'treball' | 'video' | 'defensa' | 'general'>('treball');
+
+  useEffect(() => {
+    localStorage.setItem('avaluacions_tfm_uoc_criteria_treball', JSON.stringify(treballCriteria));
+  }, [treballCriteria]);
+
+  useEffect(() => {
+    localStorage.setItem('avaluacions_tfm_uoc_criteria_video', JSON.stringify(videoCriteria));
+  }, [videoCriteria]);
+
+  useEffect(() => {
+    localStorage.setItem('avaluacions_tfm_uoc_criteria_defensa', JSON.stringify(defensaCriteria));
+  }, [defensaCriteria]);
+
+  useEffect(() => {
+    localStorage.setItem('avaluacions_tfm_uoc_global_bg', globalBg);
+  }, [globalBg]);
+
   // Create / Input student fields
   const [newStudentName, setNewStudentName] = useState('');
   const [newTfmTitle, setNewTfmTitle] = useState('');
@@ -799,7 +847,7 @@ export default function App() {
   }
 
   return (
-    <div className="bg-slate-50 text-slate-900 min-h-screen font-sans flex flex-col justify-between">
+    <div className={`text-slate-900 min-h-screen font-sans flex flex-col justify-between ${globalBg === 'white' ? 'bg-white' : 'bg-slate-50'}`}>
       
       {/* Visual Workspace Bar */}
       <header className="sticky top-0 bg-white border-b border-rose-100/40 shadow-xs z-30 selection:bg-indigo-100">
@@ -1481,6 +1529,22 @@ export default function App() {
                   <Sparkles size={13} className="text-secondary" />
                   <span>Avaluació Final UOC</span>
                 </button>
+
+                {/* Global Configuration Tab */}
+                <button
+                  id="tab-config"
+                  type="button"
+                  onClick={() => setActiveTab('config')}
+                  className={`px-5 py-2.5 text-xs font-extrabold uppercase tracking-widest border-b-2 transition-all bg-slate-100/50 rounded-t-xl shrink-0 flex items-center gap-1.5 ${
+                    activeTab === 'config'
+                      ? 'border-indigo-600 text-indigo-700 bg-slate-100 font-extrabold'
+                      : 'border-transparent text-slate-550 hover:text-slate-950'
+                  }`}
+                  title="Configura l'esquema de rúbriques, pesos, indicadors de text d'avaluació i color del fons general"
+                >
+                  <Sliders size={13} className="text-indigo-650" />
+                  <span>⚙️ Rúbrica i Fons</span>
+                </button>
               </div>
 
               {/* TAB VIEWS WORKSPACE CONTROLLERS: */}
@@ -1562,7 +1626,7 @@ export default function App() {
                   id="section-rubric-treball"
                   title="2. Rúbrica del Procés i Contingut del Treball Escrit (60% de la nota final)"
                   description="Criteris generals puntuats en nivell de 1 a 4: Excel·lent (4), Bo (3), Adequat (2) i Insuficient (1). Ambdós rols avaluen aquesta part per tal de computar-ne la mitjana."
-                  criteria={TREBALL_CRITERIA}
+                  criteria={treballCriteria}
                   scoring={activeTfm.evaluatorRole === 'tutor' ? activeTfm.tutorRubric : activeTfm.avaluadorRubric}
                   onUpdateScoring={(updated) => {
                     updateActiveTfm((prev) => {
@@ -1583,7 +1647,7 @@ export default function App() {
                     id="section-rubric-video"
                     title="Vídeo de la Presentació del TFM (Marcador de Vídeo)"
                     description="Vídeo d'exposició: estructura, capacitat de síntesi i habilitats comunicatives verbals."
-                    criteria={VIDEO_CRITERIA}
+                    criteria={videoCriteria}
                     scoring={activeTfm.videoRubric}
                     onUpdateScoring={(updated) => {
                       updateActiveTfm((prev) => ({ ...prev, videoRubric: updated }));
@@ -1597,7 +1661,7 @@ export default function App() {
                         Notes de la Defensa (Compartit amb Defensa Presencial)
                       </h4>
                       <p className="text-[11px] text-slate-400">
-                        Anotacions per a l'avaluació de la defensa i presentació en vídeo (compromeses en ambdues pestanyes).
+                        Anotacions per a l'avaluació de la defense i presentació en vídeo (compromeses en ambdues pestanyes).
                       </p>
                     </div>
 
@@ -1620,7 +1684,7 @@ export default function App() {
                     id="section-rubric-defensa"
                     title="Defensa Oral Presencial o Síncrona"
                     description="Avalua en detall la claredat de les respostes de l'estudiant, la qualitat de l'argumentació i l'aportació d'informació addicional durant la tisorada de preguntes."
-                    criteria={DEFENSA_CRITERIA}
+                    criteria={defensaCriteria}
                     scoring={activeTfm.defensaRubric}
                     onUpdateScoring={(updated) => {
                       updateActiveTfm((prev) => ({ ...prev, defensaRubric: updated }));
@@ -1711,11 +1775,403 @@ export default function App() {
 
               {/* Tab 6: Summary Scores and Copy Report Acta (Both roles) */}
               {activeTab === 'summary' && (
-                <EvaluationSummary tfm={activeTfm} />
+                <EvaluationSummary
+                  tfm={activeTfm}
+                  treballCriteria={treballCriteria}
+                  videoCriteria={videoCriteria}
+                  defensaCriteria={defensaCriteria}
+                />
               )}
 
-              {/* General Comments Box synchronized across all normal evaluation tabs (Except PDF tab which has floating window) */}
-              {activeTab !== 'pdf' && (
+              {/* Tab 7: Global Configuration & Background Color Selector */}
+              {activeTab === 'config' && (
+                <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs flex flex-col gap-6">
+                  {/* Header info */}
+                  <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between border-b border-slate-100 pb-4 gap-4">
+                    <div>
+                      <h3 className="text-base font-extrabold text-slate-800 tracking-tight flex items-center gap-1.5 uppercase select-none">
+                        <Sliders size={16} className="text-indigo-650 animate-pulse" />
+                        <span>Configuració Global d'Avaluació i Disseny</span>
+                      </h3>
+                      <p className="text-xs text-slate-500 mt-1">
+                        Els canvis fets d'aquesta pestanya adaptaran instantàniament les rúbriques i el color de fons per a tots els TFM de l'aplicació.
+                      </p>
+                    </div>
+
+                    {/* Restore Defaults */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (confirm('Esteu segur que voleu restaurar la llista de criteris i rúbriques originals de la UOC per defecte? Es perdran totes les edicions personalitzades.')) {
+                          localStorage.removeItem('avaluacions_tfm_uoc_criteria_treball');
+                          localStorage.removeItem('avaluacions_tfm_uoc_criteria_video');
+                          localStorage.removeItem('avaluacions_tfm_uoc_criteria_defensa');
+                          setTreballCriteria(TREBALL_CRITERIA);
+                          setVideoCriteria(VIDEO_CRITERIA);
+                          setDefensaCriteria(DEFENSA_CRITERIA);
+                          alert('S’han restaurat correctament els criteris i indicadors originals de la UOC.');
+                        }
+                      }}
+                      className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-slate-650 px-3.5 py-2 border border-slate-200 bg-white hover:bg-rose-50 hover:text-rose-700 hover:border-rose-100 rounded-xl transition-all shadow-3xs cursor-pointer"
+                    >
+                      <RotateCcw size={11} className="animate-spin-slow" />
+                      <span>Restaurar Rúbrica per Defecte</span>
+                    </button>
+                  </div>
+
+                  {/* Section 1: Selector de fons */}
+                  <div className="bg-slate-50/40 border border-slate-200/60 rounded-2xl p-5 flex flex-col gap-4">
+                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5 select-none">
+                      🎨 Color de Fons de l'Aplicació (Global)
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* White bg button */}
+                      <button
+                        type="button"
+                        onClick={() => setGlobalBg('white')}
+                        className={`flex items-center gap-3.5 p-4 border rounded-2xl transition-all text-left cursor-pointer ${
+                          globalBg === 'white'
+                            ? 'border-indigo-600 bg-white ring-4 ring-indigo-500/5 font-extrabold shadow-xs'
+                            : 'border-slate-200 bg-white hover:border-slate-350 hover:bg-slate-50/50'
+                        }`}
+                      >
+                        <div className="w-5 h-5 rounded-full border border-slate-300 bg-white flex items-center justify-center shrink-0">
+                          {globalBg === 'white' && <div className="w-3 h-3 rounded-full bg-indigo-650" />}
+                        </div>
+                        <div>
+                          <p className="text-xs font-extrabold text-slate-800">Fons Blanc Pur</p>
+                          <p className="text-[10px] text-slate-405 mt-0.5">Estableix un estil clar i minimalista.</p>
+                        </div>
+                      </button>
+
+                      {/* Gray bg button */}
+                      <button
+                        type="button"
+                        onClick={() => setGlobalBg('gray')}
+                        className={`flex items-center gap-3.5 p-4 border rounded-2xl transition-all text-left cursor-pointer ${
+                          globalBg === 'gray'
+                            ? 'border-indigo-600 bg-slate-50 ring-4 ring-indigo-500/5 font-extrabold shadow-xs'
+                            : 'border-slate-200 bg-white hover:border-slate-350 hover:bg-slate-50/50'
+                        }`}
+                      >
+                        <div className="w-5 h-5 rounded-full border border-slate-300 bg-white flex items-center justify-center shrink-0">
+                          {globalBg === 'gray' && <div className="w-3 h-3 rounded-full bg-indigo-650" />}
+                        </div>
+                        <div>
+                          <p className="text-xs font-extrabold text-slate-800">Fons Gris Clar (UOC Original)</p>
+                          <p className="text-[10px] text-slate-405 mt-0.5">Contrasta elegants targetes blanques sobre un fons tènue.</p>
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Section 2: Editor de Rúbriques */}
+                  <div className="flex flex-col gap-4">
+                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5 select-none">
+                      🛠️ Editor de Criteris, Puntuacions de Pes i Indicadors de Nivell (1-4)
+                    </h4>
+
+                    {/* Criteria Category Navigation Tabs */}
+                    <div className="flex items-center bg-slate-100 p-1 rounded-xl shrink-0 gap-1.5 border border-slate-200/50">
+                      <button
+                        type="button"
+                        onClick={() => setSettingsActiveSubTab('treball')}
+                        className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                          settingsActiveSubTab === 'treball'
+                            ? 'bg-white text-indigo-700 shadow-3xs font-extrabold scale-[1.01]'
+                            : 'text-slate-650 hover:text-slate-900'
+                        }`}
+                      >
+                        2. Treball Escrit (60%)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSettingsActiveSubTab('video')}
+                        className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                          settingsActiveSubTab === 'video'
+                            ? 'bg-white text-indigo-700 shadow-3xs font-extrabold scale-[1.01]'
+                            : 'text-slate-650 hover:text-slate-900'
+                        }`}
+                      >
+                        3. Vídeo d'Exposició (10%)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSettingsActiveSubTab('defensa')}
+                        className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                          settingsActiveSubTab === 'defensa'
+                            ? 'bg-white text-indigo-700 shadow-3xs font-extrabold scale-[1.01]'
+                            : 'text-slate-650 hover:text-slate-900'
+                        }`}
+                      >
+                        3. Defensa Síncrona (10%)
+                      </button>
+                    </div>
+
+                    {/* Criteria Sub List rendering */}
+                    {(() => {
+                      const criteriaList =
+                        settingsActiveSubTab === 'treball'
+                          ? treballCriteria
+                          : settingsActiveSubTab === 'video'
+                          ? videoCriteria
+                          : defensaCriteria;
+
+                      const setCriteriaList = (newList: any[]) => {
+                        if (settingsActiveSubTab === 'treball') {
+                          setTreballCriteria(newList);
+                        } else if (settingsActiveSubTab === 'video') {
+                          setVideoCriteria(newList);
+                        } else {
+                          setDefensaCriteria(newList);
+                        }
+                      };
+
+                      // Helpers to manipulate arrays
+                      const handleRename = (id: string, newName: string) => {
+                        setCriteriaList(criteriaList.map((c) => (c.id === id ? { ...c, name: newName } : c)));
+                      };
+
+                      const handleWeightChange = (id: string, weightString: string) => {
+                        const val = parseFloat(weightString) || 0;
+                        setCriteriaList(criteriaList.map((c) => (c.id === id ? { ...c, weight: val } : c)));
+                      };
+
+                      const handleLevelTextChange = (id: string, levelNum: 1 | 2 | 3 | 4, val: string) => {
+                        setCriteriaList(
+                          criteriaList.map((c) =>
+                            c.id === id
+                              ? {
+                                  ...c,
+                                  levels: {
+                                    ...c.levels,
+                                    [levelNum]: val,
+                                  },
+                                }
+                              : c
+                          )
+                        );
+                      };
+
+                      const moveUp = (index: number) => {
+                        if (index === 0) return;
+                        const copy = [...criteriaList];
+                        const temp = copy[index];
+                        copy[index] = copy[index - 1];
+                        copy[index - 1] = temp;
+                        setCriteriaList(copy);
+                      };
+
+                      const moveDown = (index: number) => {
+                        if (index === criteriaList.length - 1) return;
+                        const copy = [...criteriaList];
+                        const temp = copy[index];
+                        copy[index] = copy[index + 1];
+                        copy[index + 1] = temp;
+                        setCriteriaList(copy);
+                      };
+
+                      const deleteCriterion = (id: string) => {
+                        if (confirm('Esteu segurs que voleu eliminar aquest criteri? També es canviaran les avaluacions desades d’aquest criteri a tots els TFM.')) {
+                          setCriteriaList(criteriaList.filter((c) => c.id !== id));
+                        }
+                      };
+
+                      const addObject = () => {
+                        const newId = `custom-crit-${Date.now()}`;
+                        const newElement = {
+                          id: newId,
+                          name: 'Nou Criteri personalitzat...',
+                          weight: 0.5,
+                          levels: {
+                            1: 'Sense assolir o insuficient.',
+                            2: 'En procés o adequat bàsic.',
+                            3: 'Assolit de forma notable.',
+                            4: 'Excepcional o excel·lent.'
+                          }
+                        };
+                        setCriteriaList([...criteriaList, newElement]);
+                      };
+
+                      const sumWeights = criteriaList.reduce((sum, item) => sum + (item.weight || 0), 0);
+
+                      return (
+                        <div className="flex flex-col gap-4 mt-2">
+                          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between text-xs bg-indigo-50/50 border border-indigo-100 text-indigo-900 rounded-xl px-4 py-3 gap-2">
+                            <div>
+                              <span><strong>Estadístiques de la secció:</strong> S’estan llistant {criteriaList.length} criteris actius per a l'avaluació.</span>
+                            </div>
+                            <div className="font-mono text-xs font-bold bg-white px-2.5 py-1 rounded-md border border-indigo-200 shrink-0 self-start sm:self-auto">
+                              Total de puntuació ponderada: <span className="font-extrabold text-indigo-700">{sumWeights.toFixed(2)} pts</span>
+                            </div>
+                          </div>
+
+                          {/* List container */}
+                          <div className="flex flex-col gap-5">
+                            {criteriaList.map((criterion, idx) => (
+                              <div
+                                key={criterion.id}
+                                className="border border-slate-200 bg-slate-50/10 rounded-2xl p-4 md:p-5 flex flex-col gap-3.5 relative shadow-2xs hover:border-slate-300 transition-all duration-150"
+                              >
+                                {/* Header Controls inside target */}
+                                <div className="flex items-center justify-between flex-wrap gap-2 border-b border-slate-100 pb-2.5">
+                                  <div className="flex items-center gap-1.5 select-none">
+                                    <span className="text-[10px] font-black font-mono px-2 py-0.5 rounded bg-indigo-100 text-indigo-800">
+                                      ÍTEM {idx + 1}
+                                    </span>
+                                    <span className="text-[10px] text-slate-500 font-extrabold uppercase tracking-wider bg-slate-100 px-2 py-0.5 rounded">
+                                      ID: {criterion.id}
+                                    </span>
+                                  </div>
+
+                                  <div className="flex items-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => moveUp(idx)}
+                                      disabled={idx === 0}
+                                      className="p-1 px-3 text-[10px] font-bold hover:bg-slate-200 disabled:opacity-30 border border-slate-200 rounded-lg bg-white cursor-pointer transition-colors"
+                                      title="Mou Amunt"
+                                    >
+                                      ▲
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => moveDown(idx)}
+                                      disabled={idx === criteriaList.length - 1}
+                                      className="p-1 px-3 text-[10px] font-bold hover:bg-slate-200 disabled:opacity-30 border border-slate-200 rounded-lg bg-white cursor-pointer transition-colors"
+                                      title="Mou Avall"
+                                    >
+                                      ▼
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => deleteCriterion(criterion.id)}
+                                      className="p-1.5 rounded-lg hover:bg-rose-50 text-rose-500 hover:text-rose-700 transition-all border border-rose-100 bg-white cursor-pointer"
+                                      title="Eliminar Criteri"
+                                    >
+                                      <Trash2 size={12} />
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {/* Main Inputs */}
+                                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                  <div className="md:col-span-3 flex flex-col gap-1">
+                                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">
+                                      Identificador visual del criteri d'avaluació
+                                    </label>
+                                    <input
+                                      type="text"
+                                      value={criterion.name}
+                                      onChange={(e) => handleRename(criterion.id, e.target.value)}
+                                      className="w-full text-xs font-bold border border-slate-250 rounded-lg p-2.5 bg-white focus:outline-hidden focus:border-indigo-500"
+                                      placeholder="Ex: Qualitat científica del marc teòric..."
+                                    />
+                                  </div>
+                                  <div className="md:col-span-1 flex flex-col gap-1">
+                                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide text-center">
+                                      Pes assignat (pts)
+                                    </label>
+                                    <input
+                                      type="number"
+                                      step="0.05"
+                                      value={criterion.weight}
+                                      onChange={(e) => handleWeightChange(criterion.id, e.target.value)}
+                                      className="w-full text-xs font-mono font-bold border border-slate-250 rounded-lg p-2.5 bg-white text-center focus:outline-hidden focus:border-indigo-500"
+                                    />
+                                  </div>
+                                </div>
+
+                                {/* Levels of evaluation text fields */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 bg-white p-3 border border-slate-100 rounded-xl mt-1">
+                                  {/* Level 1 */}
+                                  <div className="flex flex-col gap-1">
+                                    <span className="text-[10px] font-bold text-rose-700 uppercase tracking-widest flex items-center gap-1.5">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                                      <span>Nivell 1 (Insuficient)</span>
+                                    </span>
+                                    <textarea
+                                      rows={2}
+                                      value={criterion.levels[1] || ''}
+                                      onChange={(e) => handleLevelTextChange(criterion.id, 1, e.target.value)}
+                                      className="w-full text-xs text-slate-600 border border-slate-200 rounded-lg p-2 bg-slate-50/20 focus:outline-hidden focus:bg-white"
+                                    />
+                                  </div>
+
+                                  {/* Level 2 */}
+                                  <div className="flex flex-col gap-1">
+                                    <span className="text-[10px] font-bold text-amber-750 uppercase tracking-widest flex items-center gap-1.5">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                                      <span>Nivell 2 (Adequat)</span>
+                                    </span>
+                                    <textarea
+                                      rows={2}
+                                      value={criterion.levels[2] || ''}
+                                      onChange={(e) => handleLevelTextChange(criterion.id, 2, e.target.value)}
+                                      className="w-full text-xs text-slate-600 border border-slate-200 rounded-lg p-2 bg-slate-50/20 focus:outline-hidden focus:bg-white"
+                                    />
+                                  </div>
+
+                                  {/* Level 3 */}
+                                  <div className="flex flex-col gap-1">
+                                    <span className="text-[10px] font-bold text-blue-700 uppercase tracking-widest flex items-center gap-1.5">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                                      <span>Nivell 3 (Bo)</span>
+                                    </span>
+                                    <textarea
+                                      rows={2}
+                                      value={criterion.levels[3] || ''}
+                                      onChange={(e) => handleLevelTextChange(criterion.id, 3, e.target.value)}
+                                      className="w-full text-xs text-slate-600 border border-slate-200 rounded-lg p-2 bg-slate-50/20 focus:outline-hidden focus:bg-white"
+                                    />
+                                  </div>
+
+                                  {/* Level 4 */}
+                                  <div className="flex flex-col gap-1">
+                                    <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-widest flex items-center gap-1.5">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                      <span>Nivell 4 (Excel·lent)</span>
+                                    </span>
+                                    <textarea
+                                      rows={2}
+                                      value={criterion.levels[4] || ''}
+                                      onChange={(e) => handleLevelTextChange(criterion.id, 4, e.target.value)}
+                                      className="w-full text-xs text-slate-600 border border-slate-200 rounded-lg p-2 bg-slate-50/20 focus:outline-hidden focus:bg-white"
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Add criterion button */}
+                          <button
+                            type="button"
+                            onClick={addObject}
+                            className="flex items-center justify-center gap-1.5 w-full py-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-extrabold rounded-xl border border-indigo-150 text-xs transition-all tracking-wider uppercase mt-2 cursor-pointer shadow-3xs"
+                          >
+                            <Plus size={14} className="stroke-[2.5]" />
+                            <span>Afegir Nou Criteri d'Avaluació</span>
+                          </button>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+              )}
+
+              {/* Tab 8: Summary Scores and Copy Report Acta (Both roles) */}
+              {activeTab === 'summary' && (
+                <EvaluationSummary
+                  tfm={activeTfm}
+                  treballCriteria={treballCriteria}
+                  videoCriteria={videoCriteria}
+                  defensaCriteria={defensaCriteria}
+                />
+              )}
+
+              {/* General Comments Box synchronized across all normal evaluation tabs (Except PDF/Config tab which has floating window) */}
+              {activeTab !== 'pdf' && activeTab !== 'config' && (
                 <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-xs flex flex-col gap-3 mt-4 border-l-4 border-l-indigo-600">
                   <div className="flex items-center justify-between">
                     <h3 className="text-xs font-extrabold uppercase tracking-widest text-slate-700 flex items-center gap-1.5 select-none">
